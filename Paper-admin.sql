@@ -41,7 +41,7 @@ CREATE TABLE Reviewer (
     Name VARCHAR(255),
     Email VARCHAR(255),
     Expertise VARCHAR(255),
-    maxPapers INT CHECK (maxPapers<5)
+    maxPapers INT
 );
 
 CREATE TABLE Review (
@@ -136,102 +136,59 @@ GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
 FLUSH PRIVILEGES;
 
 
--- WITH RECURSIVE ReviewHistory AS (
---     SELECT 
---         ReviewID,
---         ReviewerID,
---         PaperID,
---         Score,
---         Feedback,
---         ReviewDate
---     FROM 
---         Review
---     WHERE 
---         ReviewerID = 1 AND PaperID = 1
---     UNION ALL
---     SELECT 
---         r.ReviewID,
---         r.ReviewerID,
---         r.PaperID,
---         r.Score,
---         r.Feedback,
---         r.ReviewDate
---     FROM 
---         Review r
---     INNER JOIN 
---         ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
---     WHERE 
---         r.ReviewDate > rh.ReviewDate
--- )
--- SELECT 
---     ReviewID,
---     ReviewerID,
---     PaperID,
---     Score,
---     Feedback,
---     ReviewDate
--- FROM 
---     ReviewHistory
--- ORDER BY 
---     ReviewDate;
+-- DELIMITER //
 
+-- CREATE PROCEDURE AssignExpeditedReview(IN PaperID INT)
+-- BEGIN
+--     DECLARE avg_score FLOAT;
+--     DECLARE senior_reviewer_id INT;
 
-DELIMITER //
+--     WITH RECURSIVE ReviewHistory AS (
+--         SELECT 
+--             ReviewID,
+--             ReviewerID,
+--             PaperID,
+--             Score,
+--             Feedback,
+--             ReviewDate
+--         FROM 
+--             Review
+--         WHERE 
+--             PaperID = PaperID
+--         UNION ALL
+--         SELECT 
+--             r.ReviewID,
+--             r.ReviewerID,
+--             r.PaperID,
+--             r.Score,
+--             r.Feedback,
+--             r.ReviewDate
+--         FROM 
+--             Review r
+--         INNER JOIN 
+--             ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
+--         WHERE 
+--             r.ReviewDate > rh.ReviewDate
+--     )
+--     SELECT AVG(Score) INTO avg_score
+--     FROM ReviewHistory;
+--     IF avg_score < 7.0 THEN
+--         SELECT ReviewerID INTO senior_reviewer_id
+--         FROM Reviewer
+--         WHERE (Expertise = 'Senior')
+--         AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = PaperID)
+--         AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
+--         LIMIT 1;
+--         IF senior_reviewer_id IS NOT NULL THEN
+--             INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
+--             VALUES (PaperID, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
+--         END IF;
+--     END IF;
+-- END //
 
-CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
-BEGIN
-    DECLARE avg_score FLOAT;
-    DECLARE senior_reviewer_id INT;
+-- DELIMITER ;
 
-    WITH RECURSIVE ReviewHistory AS (
-        SELECT 
-            ReviewID,
-            ReviewerID,
-            PaperID,
-            Score,
-            Feedback,
-            ReviewDate
-        FROM 
-            Review
-        WHERE 
-            PaperID = paper_id
-        UNION ALL
-        SELECT 
-            r.ReviewID,
-            r.ReviewerID,
-            r.PaperID,
-            r.Score,
-            r.Feedback,
-            r.ReviewDate
-        FROM 
-            Review r
-        INNER JOIN 
-            ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
-        WHERE 
-            r.ReviewDate > rh.ReviewDate
-    )
-    SELECT AVG(Score) INTO avg_score
-    FROM ReviewHistory;
-    IF avg_score < 7.0 THEN
-        SELECT ReviewerID INTO senior_reviewer_id
-        FROM Reviewer
-        WHERE (Expertise = 'Senior')
-        AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
-        AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
-        LIMIT 1;
-        IF senior_reviewer_id IS NOT NULL THEN
-            INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
-            VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
-        END IF;
-    END IF;
-END //
-
-DELIMITER ;
-
-CALL AssignExpeditedReview(1);
-
-
-
+-- CALL AssignExpeditedReview(1)
 
 -- TrackResubmission Trigger
 DELIMITER //
@@ -252,34 +209,30 @@ DELIMITER ;
 
 
 -- Aggregate Scores Function 
-DELIMITER //
+DELIMITER $$
 
-CREATE FUNCTION CalculateAggregateScores(paper_id INT)
-RETURNS FLOAT
+CREATE FUNCTION CalculateWeightedScore(PaperID INT)
+RETURNS DECIMAL(5,2)
 DETERMINISTIC
 BEGIN
-    DECLARE aggregate_score FLOAT;
-
-    -- Calculate the weighted average score
-    SELECT 
-        SUM(
-            Review.Score * 
-            CASE 
-                WHEN Reviewer.Expertise = 'Senior' THEN 2
-                ELSE 1
-            END
-        ) / SUM(
-            CASE 
-                WHEN Reviewer.Expertise = 'Senior' THEN 2
-                ELSE 1
-            END
-        ) INTO aggregate_score
-    FROM Review
-    JOIN Reviewer ON Review.ReviewerID = Reviewer.ReviewerID
-    WHERE Review.PaperID = paper_id;
-
-    RETURN aggregate_score;
-END;
-//
+    DECLARE total_score DECIMAL(10,2) DEFAULT 0;
+    DECLARE total_weight INT DEFAULT 0;
+    SELECT SUM(r.Score * IF(rv.maxPapers > 5, 2, 1)) INTO total_score FROM Review r
+    JOIN 
+        Reviewer rv ON r.ReviewerID = rv.ReviewerID
+    WHERE r.PaperID = PaperID AND r.Score IS NOT NULL;
+    SELECT SUM(IF(rv.maxPapers > 5, 2, 1)) INTO total_weight FROM Review r
+    JOIN 
+        Reviewer rv ON r.ReviewerID = rv.ReviewerID
+    WHERE r.PaperID = PaperID AND r.Score IS NOT NULL;
+    IF total_weight = 0 THEN
+        RETURN NULL;
+    ELSE
+        RETURN total_score / total_weight;
+    END IF;
+END$$
 
 DELIMITER ;
+
+
+SELECT CalculateWeightedScore(3) AS Weighted_Aggregate_Score;
