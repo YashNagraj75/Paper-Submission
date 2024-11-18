@@ -187,6 +187,22 @@ END;
 $$
 DELIMITER ;
 
+DELIMITER //
+
+CREATE TRIGGER TrackResubmission
+BEFORE UPDATE ON Paper
+FOR EACH ROW
+BEGIN
+    IF NEW.Title != OLD.Title OR NEW.Keywords != OLD.Keywords THEN
+        SET NEW.SubmissionDate = CURDATE();
+        IF OLD.status IN ('Submitted', 'Under Review') THEN
+            SET NEW.status = 'Resubmitted';
+        END IF;
+    END IF;
+END;
+//
+DELIMITER ;
+
 SET FOREIGN_KEY_CHECKS = 0;
 
 INSERT INTO Author (AuthorID, Name, Email, Affiliation, ProfileCreationDate, Age, Password) VALUES
