@@ -213,5 +213,24 @@ BEGIN
     END IF;
 END;
 //
+DELIMITER ;
 
+
+--Aggregate Scores Function 
+DELIMITER //
+
+CREATE FUNCTION CalculateAggregateScore(paper_id INT)
+RETURNS DECIMAL(10, 2)
+DETERMINISTIC
+BEGIN
+    DECLARE aggregate_score DECIMAL(10, 2);
+    SELECT 
+        SUM(r.score * CASE WHEN r.reviewer_type = 'Senior Reviewer' THEN 2 ELSE 1 END) /
+        SUM(CASE WHEN r.reviewer_type = 'Senior Reviewer' THEN 2 ELSE 1 END)
+    INTO aggregate_score
+    FROM Reviews r
+    WHERE r.paper_id = paper_id;
+    RETURN IFNULL(aggregate_score, 0);
+END;
+//
 DELIMITER ;
