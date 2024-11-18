@@ -10,6 +10,7 @@ python = "^3.12"
 streamlit = "^1.40.1"
 fastapi = "^0.115.5"
 mysql = "^0.0.3"
+pydantic = "^2.9.2"
 
 
 [build-system]
