@@ -24,6 +24,7 @@ CREATE TABLE Paper (
     Keywords VARCHAR(255),
     SubmissionDate DATE,
     TrackID INT,
+    Status ENUM('Submitted', 'Under Review', 'Accepted', 'Rejected', 'Resubmitted') DEFAULT 'Submitted',
     FOREIGN KEY (TrackID) REFERENCES Track(TrackID)
 );
 
@@ -135,44 +136,44 @@ GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
 FLUSH PRIVILEGES;
 
 
-WITH RECURSIVE ReviewHistory AS (
-    SELECT 
-        ReviewID,
-        ReviewerID,
-        PaperID,
-        Score,
-        Feedback,
-        ReviewDate
-    FROM 
-        Review
-    WHERE 
-        ReviewerID = 1 AND PaperID = 1
-    UNION ALL
-    SELECT 
-        r.ReviewID,
-        r.ReviewerID,
-        r.PaperID,
-        r.Score,
-        r.Feedback,
-        r.ReviewDate
-    FROM 
-        Review r
-    INNER JOIN 
-        ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
-    WHERE 
-        r.ReviewDate > rh.ReviewDate
-)
-SELECT 
-    ReviewID,
-    ReviewerID,
-    PaperID,
-    Score,
-    Feedback,
-    ReviewDate
-FROM 
-    ReviewHistory
-ORDER BY 
-    ReviewDate;
+-- WITH RECURSIVE ReviewHistory AS (
+--     SELECT 
+--         ReviewID,
+--         ReviewerID,
+--         PaperID,
+--         Score,
+--         Feedback,
+--         ReviewDate
+--     FROM 
+--         Review
+--     WHERE 
+--         ReviewerID = 1 AND PaperID = 1
+--     UNION ALL
+--     SELECT 
+--         r.ReviewID,
+--         r.ReviewerID,
+--         r.PaperID,
+--         r.Score,
+--         r.Feedback,
+--         r.ReviewDate
+--     FROM 
+--         Review r
+--     INNER JOIN 
+--         ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
+--     WHERE 
+--         r.ReviewDate > rh.ReviewDate
+-- )
+-- SELECT 
+--     ReviewID,
+--     ReviewerID,
+--     PaperID,
+--     Score,
+--     Feedback,
+--     ReviewDate
+-- FROM 
+--     ReviewHistory
+-- ORDER BY 
+--     ReviewDate;
 
 
 DELIMITER //
@@ -211,7 +212,6 @@ BEGIN
     )
     SELECT AVG(Score) INTO avg_score
     FROM ReviewHistory;
-    SELECT avg_score;
     IF avg_score < 7.0 THEN
         SELECT ReviewerID INTO senior_reviewer_id
         FROM Reviewer
@@ -219,7 +219,6 @@ BEGIN
         AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
         AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
         LIMIT 1;
-        SELECT senior_reviewer_id;
         IF senior_reviewer_id IS NOT NULL THEN
             INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
             VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
@@ -241,8 +240,8 @@ CREATE TRIGGER TrackResubmission
 BEFORE UPDATE ON Paper
 FOR EACH ROW
 BEGIN
-    IF NEW.title != OLD.title OR NEW.abstract != OLD.abstract OR NEW.keywords != OLD.keywords THEN
-        SET NEW.submission_date = CURDATE();
+    IF NEW.Title != OLD.Title OR NEW.Keywords != OLD.Keywords THEN
+        SET NEW.SubmissionDate = CURDATE();
         IF OLD.status IN ('Submitted', 'Under Review') THEN
             SET NEW.status = 'Resubmitted';
         END IF;
@@ -252,7 +251,7 @@ END;
 DELIMITER ;
 
 
---Aggregate Scores Function 
+-- Aggregate Scores Function 
 DELIMITER //
 
 CREATE FUNCTION CalculateAggregateScore(paper_id INT)
@@ -261,11 +260,11 @@ DETERMINISTIC
 BEGIN
     DECLARE aggregate_score DECIMAL(10, 2);
     SELECT 
-        SUM(r.score * CASE WHEN r.reviewer_type = 'Senior Reviewer' THEN 2 ELSE 1 END) /
-        SUM(CASE WHEN r.reviewer_type = 'Senior Reviewer' THEN 2 ELSE 1 END)
+        SUM(r.score * CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END) /
+        SUM(CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END)
     INTO aggregate_score
     FROM Reviews r
-    WHERE r.paper_id = paper_id;
+    WHERE r.PaperID = paper_id;
     RETURN IFNULL(aggregate_score, 0);
 END;
 //
