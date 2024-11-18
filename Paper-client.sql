@@ -1,4 +1,3 @@
--- Server Part
 CREATE DATABASE Paper;
 USE Paper;
 
@@ -44,7 +43,7 @@ CREATE TABLE Reviewer (
 );
 
 CREATE TABLE Review (
-    ReviewID INT PRIMARY KEY,
+    ReviewID INT PRIMARY KEY AUTO_INCREMENT,
     PaperID INT,
     ReviewerID INT,
     Score INT,
@@ -104,11 +103,16 @@ INSERT INTO Reviewer (ReviewerID, Name, Email, ExpertiseArea, maxPapers) VALUES
 (5, 'George Red', 'george@example.com', 'Natural Language Processing', 6);
 
 INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
-(1, 1, 1, 85, 'Good work on deep learning techniques.', '2023-03-10'),
-(2, 2, 2, 90, 'Excellent analysis methods.', '2023-03-11'),
-(3, 3, 3, 88, 'Innovative use of AI in healthcare.', '2023-03-12'),
-(4, 4, 4, 92, 'Great work on image recognition.', '2023-03-13'),
-(5, 5, 5, 87, 'Impressive text generation techniques.', '2023-03-14');
+(1, 1, 1, 3.5, 'Good work on deep learning techniques.', '2023-03-10'),
+(2, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
+(3, 3, 3, 8.8, 'Innovative use of AI in healthcare.', '2023-03-12'),
+(4, 4, 4, 1.2, 'Great work on image recognition.', '2023-03-13'),
+(5, 5, 5, 8.7, 'Impressive text generation techniques.', '2023-03-14'),
+(6, 1, 2, 1.5, 'Excellent work on deep learning techniques.', '2023-03-15'),
+(7, 1, 1, 2.8, 'Revised review: Improved work on deep learning techniques.', '2023-03-20'),
+(8, 1, 1, 3.0, 'Final review: Excellent work on deep learning techniques.', '2023-03-25'),
+(9, 2, 2, 2.5, 'Revised review: Good analysis methods.', '2023-03-21'),
+(10, 2, 2, 7.7, 'Final review: Very good analysis methods.', '2023-03-26');
 
 INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VALUES
 (1, 1, '2023-04-01', '10:00:00', 'Room 101'),
@@ -117,18 +121,78 @@ INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VAL
 (4, 4, '2023-04-04', '13:00:00', 'Room 104'),
 (5, 5, '2023-04-05', '14:00:00', 'Room 105');
 
+CREATE USER 'federated_user'@'%' IDENTIFIED BY 'federated_password';
+GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
+FLUSH PRIVILEGES;
 
-INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
-(6, 1, 2, 95, 'Excellent work on deep learning techniques.', '2023-03-15');
 
-CREATE TABLE ReviewFederated (
-    ReviewID INT PRIMARY KEY,
-    PaperID INT,
-    ReviewerID INT,
-    Score INT,
-    Feedback TEXT,
-    ReviewDate DATE
-) ENGINE=FEDERATED
-CONNECTION='mysql://federated_user:federated_password@192.168.208.46:3306/Paper/Review';
+WITH RECURSIVE ReviewHistory AS (
+    SELECT 
+        ReviewID,
+        ReviewerID,
+        PaperID,
+        Score,
+        Feedback,
+        ReviewDate
+    FROM 
+        Review
+    WHERE 
+        ReviewerID = 1 AND PaperID = 1
+    UNION ALL
+    SELECT 
+        r.ReviewID,
+        r.ReviewerID,
+        r.PaperID,
+        r.Score,
+        r.Feedback,
+        r.ReviewDate
+    FROM 
+        Review r
+    INNER JOIN 
+        ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
+    WHERE 
+        r.ReviewDate > rh.ReviewDate
+)
+SELECT 
+    ReviewID,
+    ReviewerID,
+    PaperID,
+    Score,
+    Feedback,
+    ReviewDate
+FROM 
+    ReviewHistory
+ORDER BY 
+    ReviewDate;
 
-SELECT * FROM ReviewFederated WHERE ReviewID = 6;
+
+DELIMITER //
+
+CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
+BEGIN
+    DECLARE avg_score FLOAT;
+    DECLARE senior_reviewer_id INT;
+    DECLARE review_count INT;
+
+    SELECT AVG(Score) INTO avg_score
+    FROM Review
+    WHERE PaperID = paper_id;
+
+    IF avg_score < 7.0 THEN
+        SELECT ReviewerID INTO senior_reviewer_id
+        FROM Reviewer
+        WHERE ExpertiseArea = 'Data Science' or ExpertiseArea = 'Machine Learning'
+        AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
+        AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
+        LIMIT 1;
+
+        IF senior_reviewer_id IS NOT NULL THEN
+            INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
+            VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
+        END IF;
+    END IF;
+END //
+
+DELIMITER ;
+
+CALL AssignExpeditedReview(1);
