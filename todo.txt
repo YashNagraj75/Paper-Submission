@@ -1,0 +1,4 @@
+trigger for each review to decide acceptance
+trigger for expedited review
+conflict of interest review
+trigger to cchange paper status
