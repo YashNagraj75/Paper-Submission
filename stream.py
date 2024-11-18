@@ -1,123 +1,148 @@
+import errno
 import streamlit as st
 import pandas as pd
+import re
+from data import author_login,author_signup, get_presentation_details,submit_new_paper,get_user_id,get_papers_by_user,update_paper_details
+from schema import Paper_Submit
 
-# Placeholder data to simulate database tables
-authors_data = []
-papers_data = []
-reviews_data = []
-schedule_data = []
+# Initialize session state for login, role, and current page
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 'Login'
 
-# Streamlit app
-st.title("GlobalTech Conference Paper Submission and Review System")
+# Email validation function
+def is_valid_email(email):
+    email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    return re.match(email_regex, email)
 
-# Tabs for different sections
-menu = ["Author Login", "Author Management", "Paper Submission", "Review Management", "Schedule"]
-choice = st.sidebar.selectbox("Navigation", menu)
+# Login form
+if st.session_state.current_page == 'Login':
+    st.header("Login Page")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    login_button = st.button("Login")
 
-if choice == "Author Login":
-    st.header("Author Login")
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        login_button = st.form_submit_button("Login")
+    if login_button:
+        # Add your login logic here
+        login = author_login(username,password)
+        if login =="Author":
+            st.session_state.logged_in = True
+            st.session_state.role = "Author"
+            st.session_state.current_page = 'Paper Submission'
+            st.success("Logged in as Author")
+        elif login == "Reviewer":
+            st.session_state.logged_in = True
+            st.session_state.role = "Reviewer"
+            st.success("Logged in as Reviewer")
 
-        if login_button:
-            if username and password:  # Simple check for demonstration purposes
-                st.success("Login successful!")
-            else:
-                st.error("Please provide both username and password.")
+        else:
+            st.error("Invalid credentials")
 
-# Author Signup Page
-elif choice == "Author Management":
-    st.header("New Author Signup")
-    with st.form("signup_form"):
-        new_username = st.text_input("New Username")
-        new_password = st.text_input("New Password", type="password")
-        email = st.text_input("Email")
-        affiliation = st.text_input("Affiliation")
-        signup_button = st.form_submit_button("Sign Up")
 
-        # Email validation
-        import re
-        def is_valid_email(email):
-            email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-            return re.match(email_regex, email)
+# Author pages
+if st.session_state.logged_in and st.session_state.role == "Author":
+    st.header("Author Dashboard")
+    
+    # Create tabs for navigation
+    tab1, tab2, tab3 = st.tabs(["Paper Submission", "Edit Paper", "Submitted Papers"])
 
-        if signup_button:
-            if new_username and new_password and email and affiliation:
-                if is_valid_email(email):
-                    st.success(f"Author '{new_username}' registered successfully!")
+    with tab1:
+        st.subheader("Submit a Paper")
+
+        # List of available tracks for the dropdown
+        tracks = ["Track A - Machine Learning", "Track B - Natural Language Processing", "Track C - Computer Vision", "Track D - Human-Computer Interaction"]
+
+        # Paper form
+        with st.form("paper_form"):
+            title = st.text_input("Paper Title")
+            abstract = st.text_area("Abstract")
+            keywords = st.text_input("Keywords")
+            submission_date = st.date_input("Submission Date")
+            track = st.selectbox("Track", tracks)
+            
+            submit = st.form_submit_button("Submit Paper")
+            
+            if submit:
+                # Add your paper submission logic here
+                paper_obj = Paper_Submit(title=title, abstract=abstract, keywords=keywords, submission_date=str(submission_date), track=track)
+                paper = submit_new_paper(paper_obj)
+                presentation_details = get_presentation_details(title)
+                if paper:
+                    st.success("Paper submitted successfully!")
+                    if presentation_details:
+                        st.table(presentation_details)
+                    else:
+                        st.error("Paper not accepted")
                 else:
-                    st.error("Please enter a valid email address.")
+                    st.error("Paper not submitted")
+
+    with tab2:
+        st.subheader("Edit Paper Details")
+        with st.form("edit_paper_form"):
+            paper_id = st.selectbox("Select Paper ID to Edit", ["1","2"])
+            new_title = st.text_input("New Title")
+            new_keywords = st.text_input("New Keywords")
+            submit_edit = st.form_submit_button("Submit Changes")
+            
+            if submit_edit:
+                update = update_paper_details(paper_id, new_title, new_keywords)
+                if update == True:
+                    st.success(f"Paper ID {paper_id} updated successfully!")
+                else:
+                    st.error(f"{update}")
+
+
+    with tab3:
+        st.subheader("Submitted Papers")
+        
+        username = st.text_input("Name")
+        user_id = get_user_id(username)
+        if st.button("Search"):
+            if user_id:
+                papers = get_papers_by_user(user_id)
+                print(papers)
+                if papers:
+                    papers_df = pd.DataFrame(papers, columns=["PaperID", "Title", "Keywords","SubmissionDate","Track"])
+                    st.table(papers_df)
             else:
-                st.error("Please fill out all fields.")
-elif choice == "Paper Submission":
-    st.header("Submit a Paper")
+                st.write("User not found.")
 
-    # List of available tracks for the dropdown
-    tracks = ["Track A - Machine Learning", "Track B - Natural Language Processing", "Track C - Computer Vision", "Track D - Human-Computer Interaction"]
 
-    # Paper form
-    with st.form("paper_form"):
-        title = st.text_input("Paper Title")
-        abstract = st.text_area("Abstract")
-        keywords = st.text_input("Keywords")
-        submission_date = st.date_input("Submission Date")
-        track = st.selectbox("Track", tracks)
-        
-        submit_paper = st.form_submit_button("Submit Paper")
-        
-        if submit_paper:
-            papers_data.append({"ID": len(papers_data) + 1, "Title": title, "Abstract": abstract, "Keywords": keywords, "Date": submission_date, "Track": track})
-            st.success(f"Paper '{title}' submitted successfully!")
 
-    # Display papers
-    st.subheader("Submitted Papers")
-    if papers_data:
-        papers_df = pd.DataFrame(papers_data)
-        st.dataframe(papers_df)
-    else:
-        st.write("No papers submitted yet.")
+# Reviewer pages with navigation bar
+if st.session_state.logged_in and st.session_state.role == "Reviewer":
+    st.sidebar.title("Navigation")
+    choice = st.sidebar.selectbox("Go to", ["Review Management", "Schedule"])
 
-elif choice == "Review Management":
-    st.header("Manage Reviews")
-    # Review form
-    with st.form("review_form"):
-        paper_id = st.number_input("Paper ID", min_value=1, step=1)
-        reviewer_id = st.number_input("Reviewer ID", min_value=1, step=1)
-        score_originality = st.slider("Score", 1, 100)
-        feedback = st.text_area("Feedback")
-        submit_review = st.form_submit_button("Submit Review")
-        
-        if submit_review:
-            reviews_data.append({"ID": len(reviews_data) + 1, "Paper ID": paper_id, "Reviewer ID": reviewer_id, "Originality": score_originality, "Relevance": score_relevance, "Quality": score_quality, "Feedback": feedback})
-            st.success(f"Review for Paper ID {paper_id} submitted successfully!")
+    if choice == "Review Management":
+        st.header("Manage Reviews")
+        # Review form
+        with st.form("review_form"):
+            paper_id = st.number_input("Paper ID", min_value=1, step=1)
+            reviewer_id = st.number_input("Reviewer ID", min_value=1, step=1)
+            score_originality = st.slider("Score", 1, 100)
+            feedback = st.text_area("Feedback")
+            submit_review = st.form_submit_button("Submit Review")
+            
+            if submit_review:
+                # Add your review submission logic here
+                st.success(f"Review for Paper ID {paper_id} submitted successfully!")
 
-    # Display reviews
-    st.subheader("Reviews")
-    if reviews_data:
-        reviews_df = pd.DataFrame(reviews_data)
-        st.dataframe(reviews_df)
-    else:
-        st.write("No reviews submitted yet.")
+        # Display reviews
+        st.subheader("Reviews")
+        reviews_data = []  # Replace with actual data fetching logic
+        if reviews_data:
+            reviews_df = pd.DataFrame(reviews_data)
+            st.dataframe(reviews_df)
+        else:
+            st.write("No reviews submitted yet.")
 
-elif choice == "Schedule":
-    st.header("Schedule Presentations")
-    # Schedule form
-    with st.form("schedule_form"):
-        paper_id = st.number_input("Paper ID", min_value=1, step=1)
-        presentation_time = st.text_input("Presentation Time")
-        location = st.text_input("Location")
-        submit_schedule = st.form_submit_button("Schedule Presentation")
-        
-        if submit_schedule:
-            schedule_data.append({"ID": len(schedule_data) + 1, "Paper ID": paper_id, "Time": presentation_time, "Location": location})
-            st.success(f"Paper ID {paper_id} scheduled for presentation!")
 
-    # Display schedule
-    st.subheader("Presentation Schedule")
-    if schedule_data:
-        schedule_df = pd.DataFrame(schedule_data)
-        st.dataframe(schedule_df)
-    else:
-        st.write("No presentations scheduled yet.")
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.role = None
+        st.session_state.current_page = 'Login'
+

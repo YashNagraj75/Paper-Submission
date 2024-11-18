@@ -5,7 +5,7 @@ class Paper_Submit(BaseModel):
     abstract: str
     keywords: str
     submission_date: str
-    tack: str
+    track: str
 
 class Review(BaseModel):
     paper_id: int
@@ -14,3 +14,14 @@ class Review(BaseModel):
     feedback: str
     date: str
 
+class Author(BaseModel):
+    name: str
+    password: str
+    email: str
+    affiliation: str
+    age: int
+
+class Schedule_Preview(BaseModel):
+    paper_id: int
+    presentation_time: str
+    room: str
