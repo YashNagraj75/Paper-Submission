@@ -125,3 +125,74 @@ INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) 
 (6, 1, 2, 95, 'Excellent work on deep learning techniques.', '2023-03-15');
 
 SELECT * FROM ReviewFederated WHERE ReviewID = 6;
+
+WITH RECURSIVE ReviewHistory AS (
+    SELECT 
+        ReviewID,
+        ReviewerID,
+        PaperID,
+        Score,
+        Feedback,
+        ReviewDate
+    FROM 
+        Review
+    WHERE 
+        ReviewerID = 1 AND PaperID = 1
+    UNION ALL
+    SELECT 
+        r.ReviewID,
+        r.ReviewerID,
+        r.PaperID,
+        r.Score,
+        r.Feedback,
+        r.ReviewDate
+    FROM 
+        Review r
+    INNER JOIN 
+        ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
+    WHERE 
+        r.ReviewDate > rh.ReviewDate
+)
+SELECT 
+    ReviewID,
+    ReviewerID,
+    PaperID,
+    Score,
+    Feedback,
+    ReviewDate
+FROM 
+    ReviewHistory
+ORDER BY 
+    ReviewDate;
+
+
+DELIMITER //
+
+CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
+BEGIN
+    DECLARE avg_score FLOAT;
+    DECLARE senior_reviewer_id INT;
+    DECLARE review_count INT;
+
+    SELECT AVG(Score) INTO avg_score
+    FROM Review
+    WHERE PaperID = paper_id;
+
+    IF avg_score < 7.0 THEN
+        SELECT ReviewerID INTO senior_reviewer_id
+        FROM Reviewer
+        WHERE ExpertiseArea = 'Data Science' or ExpertiseArea = 'Machine Learning'
+        AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
+        AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
+        LIMIT 1;
+
+        IF senior_reviewer_id IS NOT NULL THEN
+            INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
+            VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
+        END IF;
+    END IF;
+END //
+
+DELIMITER ;
+
+CALL AssignExpeditedReview(1);
