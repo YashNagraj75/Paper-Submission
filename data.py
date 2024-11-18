@@ -146,7 +146,7 @@ def get_user_id(username: str):
 # Function to get all papers submitted by a user given their user ID
 def get_papers_by_user(user_id: int):
     query = """
-    SELECT Paper.PaperID, Paper.Title, Paper.Keywords, Paper.SubmissionDate, Paper.TrackID
+    SELECT Paper.PaperID, Paper.Title, Paper.Keywords, Paper.SubmissionDate, Paper.Status
     FROM Paper
     INNER JOIN PaperAuthor ON Paper.PaperID = PaperAuthor.PaperID
     WHERE PaperAuthor.AuthorID = %s

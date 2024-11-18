@@ -103,7 +103,7 @@ if st.session_state.logged_in and st.session_state.role == "Author":
                 papers = get_papers_by_user(user_id)
                 print(papers)
                 if papers:
-                    papers_df = pd.DataFrame(papers, columns=["PaperID", "Title", "Keywords","SubmissionDate","Track"])
+                    papers_df = pd.DataFrame(papers, columns=["PaperID", "Title", "Keywords","SubmissionDate","Status"])
                     st.table(papers_df)
             else:
                 st.write("User not found.")
