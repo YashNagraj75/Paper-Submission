@@ -178,12 +178,14 @@ BEGIN
     SELECT 
         SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
         SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
+        SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
+        SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
     INTO aggregate_score
     FROM Reviews r
     WHERE r.PaperID = paper_id;
     RETURN IFNULL(aggregate_score, 0);
 END;
-//
+$$
 DELIMITER ;
 
 SET FOREIGN_KEY_CHECKS = 0;
