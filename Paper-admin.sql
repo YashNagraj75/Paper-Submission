@@ -41,7 +41,7 @@ CREATE TABLE Reviewer (
     Name VARCHAR(255),
     Email VARCHAR(255),
     Expertise VARCHAR(255),
-    maxPapers INT
+    maxPapers INT CHECK (maxPapers<5)
 );
 
 CREATE TABLE Review (
@@ -252,7 +252,7 @@ DELIMITER ;
 
 
 -- Aggregate Scores Function 
-DELIMITER //
+DELIMITER $$
 
 CREATE FUNCTION CalculateAggregateScore(paper_id INT)
 RETURNS DECIMAL(10, 2)
@@ -260,12 +260,12 @@ DETERMINISTIC
 BEGIN
     DECLARE aggregate_score DECIMAL(10, 2);
     SELECT 
-        SUM(r.score * CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END) /
-        SUM(CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END)
+        SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
+        SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
     INTO aggregate_score
     FROM Reviews r
     WHERE r.PaperID = paper_id;
     RETURN IFNULL(aggregate_score, 0);
 END;
-//
+$$
 DELIMITER ;
