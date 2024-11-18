@@ -24,7 +24,7 @@ CREATE TABLE Paper (
     Keywords VARCHAR(255),
     SubmissionDate DATE,
     TrackID INT,
-    Status ENUM('Submitted', 'Under Review', 'Accepted', 'Rejected', 'Resubmitted') DEFAULT 'Submitted',
+    Status ENUM('Under Review', 'Accepted', 'Rejected', 'Resubmitted', 'Reviewed') DEFAULT 'Under Review',
     FOREIGN KEY (TrackID) REFERENCES Track(TrackID)
 );
 
@@ -38,17 +38,19 @@ CREATE TABLE PaperAuthor (
 
 CREATE TABLE Reviewer (
     ReviewerID INT PRIMARY KEY,
+    AuthorID INT,
     Name VARCHAR(255),
     Email VARCHAR(255),
     Expertise VARCHAR(255),
-    maxPapers INT
+    maxPapers INT,
+    FOREIGN KEY (AuthorID) REFERENCES Author(AuthorID)
 );
 
 CREATE TABLE Review (
     ReviewID INT PRIMARY KEY AUTO_INCREMENT,
     PaperID INT,
     ReviewerID INT,
-    Score INT,
+    Score FLOAT DEFAULT 0.0,
     Feedback TEXT,
     ReviewDate DATE,
     FOREIGN KEY (PaperID) REFERENCES Paper(PaperID),
@@ -64,6 +66,129 @@ CREATE TABLE Schedule (
     FOREIGN KEY (PaperID) REFERENCES Paper(PaperID)
 );
 
+CREATE USER 'federated_user'@'%' IDENTIFIED BY 'federated_password';
+GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
+FLUSH PRIVILEGES;
+
+DELIMITER //
+
+CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
+BEGIN
+    DECLARE avg_score FLOAT;
+    DECLARE senior_reviewer_id INT;
+    DECLARE paper_status ENUM('Under Review', 'Accepted', 'Rejected', 'Resubmitted', 'Reviewed');
+
+    SELECT Status INTO paper_status
+    FROM Paper
+    WHERE PaperID = paper_id;
+
+    IF paper_status = 'Reviewed' THEN
+        WITH RECURSIVE ReviewHistory AS (
+            SELECT 
+                ReviewID,
+                ReviewerID,
+                PaperID,
+                Score,
+                Feedback,
+                ReviewDate
+            FROM 
+                Review
+            WHERE 
+                PaperID = paper_id
+            UNION ALL
+            SELECT 
+                r.ReviewID,
+                r.ReviewerID,
+                r.PaperID,
+                r.Score,
+                r.Feedback,
+                r.ReviewDate
+            FROM 
+                Review r
+            INNER JOIN 
+                ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
+            WHERE 
+                r.ReviewDate > rh.ReviewDate
+        )
+        SELECT AVG(Score) INTO avg_score
+        FROM ReviewHistory;
+
+        IF avg_score < 7.0 THEN
+            SELECT ReviewerID INTO senior_reviewer_id
+            FROM Reviewer
+            WHERE Expertise = 'Senior'
+            AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
+            AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
+            LIMIT 1;
+
+            IF senior_reviewer_id IS NOT NULL THEN
+                INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
+                VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
+            END IF;
+        END IF;
+    END IF;
+END //
+
+DELIMITER ;
+
+CALL AssignExpeditedReview(1);
+
+CREATE TABLE DebugLog (Message VARCHAR(255));
+
+DELIMITER //
+CREATE TRIGGER AssignReviewerOnSubmission
+AFTER INSERT ON Paper
+FOR EACH ROW
+BEGIN
+    DECLARE reviewer_id INT;
+    DECLARE debug_message VARCHAR(255);
+    DECLARE assigned_reviewers INT DEFAULT 0;
+
+    reviewers_loop: WHILE assigned_reviewers < 3 DO
+        SELECT Reviewer.ReviewerID INTO reviewer_id
+        FROM Reviewer
+        JOIN PaperAuthor ON Reviewer.AuthorID != PaperAuthor.AuthorID
+        WHERE PaperAuthor.PaperID = NEW.PaperID
+        AND Reviewer.ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = NEW.PaperID)
+        AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
+        ORDER BY RAND()
+        LIMIT 1;
+
+        IF reviewer_id IS NULL THEN
+            LEAVE reviewers_loop; 
+        ELSE
+            INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
+            VALUES (NEW.PaperID, reviewer_id, 0.0, '', CURDATE());
+            SET assigned_reviewers = assigned_reviewers + 1;
+        END IF;
+    END WHILE reviewers_loop;
+
+END;
+//
+DELIMITER ;
+
+
+
+DELIMITER //
+
+CREATE FUNCTION CalculateAggregateScore(paper_id INT)
+RETURNS DECIMAL(10, 2)
+DETERMINISTIC
+BEGIN
+    DECLARE aggregate_score DECIMAL(10, 2);
+    SELECT 
+        SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
+        SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
+    INTO aggregate_score
+    FROM Reviews r
+    WHERE r.PaperID = paper_id;
+    RETURN IFNULL(aggregate_score, 0);
+END;
+//
+DELIMITER ;
+
+SET FOREIGN_KEY_CHECKS = 0;
+
 INSERT INTO Author (AuthorID, Name, Email, Affiliation, ProfileCreationDate, Age, Password) VALUES
 (1, 'Alice Smith', 'alice@example.com', 'University A', '2023-01-01', 35, 'password123'),
 (2, 'Bob Johnson', 'bob@example.com', 'University B', '2023-02-01', 40, 'password456'),
@@ -78,12 +203,12 @@ INSERT INTO Track (TrackID, TrackName, Description) VALUES
 (4, 'Computer Vision', 'Research on image and video analysis'),
 (5, 'Natural Language Processing', 'Research on language understanding and generation');
 
-INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
-(1, 'Deep Learning Techniques', 'deep learning, neural networks', '2023-03-01', 1),
-(2, 'Data Analysis Methods', 'data analysis, statistics', '2023-03-02', 2),
-(3, 'AI in Healthcare', 'AI, healthcare', '2023-03-03', 3),
-(4, 'Image Recognition', 'computer vision, image recognition', '2023-03-04', 4),
-(5, 'Text Generation', 'NLP, text generation', '2023-03-05', 5);
+INSERT INTO Reviewer (ReviewerID, AuthorID, Name, Email, Expertise, maxPapers) VALUES
+(1, 1, 'Charlie Brown', 'charlie@example.com', 'Senior', 5),
+(2, 2, 'Diana Prince', 'diana@example.com', 'Junior', 3),
+(3, 3, 'Edward Green', 'edward@example.com', 'Senior', 4),
+(4, 4, 'Fiona Blue', 'fiona@example.com', 'Senior', 2),
+(5, 5, 'George Red', 'george@example.com', 'Junior', 6);
 
 INSERT INTO PaperAuthor (PaperID, AuthorID) VALUES
 (1, 1),
@@ -97,32 +222,34 @@ INSERT INTO PaperAuthor (PaperID, AuthorID) VALUES
 (4, 4),
 (5, 5);
 
-INSERT INTO Reviewer (ReviewerID, Name, Email, Expertise, maxPapers) VALUES
-(1, 'Charlie Brown', 'charlie@example.com', 'Senior', 5),
-(2, 'Diana Prince', 'diana@example.com', 'Junior', 3),
-(3, 'Edward Green', 'edward@example.com', 'Senior', 4),
-(4, 'Fiona Blue', 'fiona@example.com', 'Senior', 2),
-(5, 'George Red', 'george@example.com', 'Junior', 6);
+INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
+(1, 'Deep Learning Techniques', 'deep learning, neural networks', '2023-03-01', 1),
+(2, 'Data Analysis Methods', 'data analysis, statistics', '2023-03-02', 2),
+(3, 'AI in Healthcare', 'AI, healthcare', '2023-03-03', 3),
+(4, 'Image Recognition', 'computer vision, image recognition', '2023-03-04', 4),
+(5, 'Text Generation', 'NLP, text generation', '2023-03-05', 5);
+
+SET FOREIGN_KEY_CHECKS = 1;
 
 INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
-(1, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
-(2, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
-(3, 3, 3, 8.8, 'Innovative use of AI in healthcare.', '2023-03-12'),
-(4, 4, 4, 9.2, 'Great work on image recognition.', '2023-03-13'),
-(5, 5, 5, 8.7, 'Impressive text generation techniques.', '2023-03-14'),
-(6, 1, 2, 3.5, 'Excellent work on deep learning techniques.', '2023-03-15'),
-(7, 1, 1, 1.8, 'Revised review: Improved work on deep learning techniques.', '2023-03-20'),
-(8, 1, 1, 8.0, 'Final review: Excellent work on deep learning techniques.', '2023-03-25'),
-(9, 2, 2, 2.3, 'Revised review: Good analysis methods.', '2023-03-21'),
-(10, 2, 2, 8.7, 'Final review: Very good analysis methods.', '2023-03-26'),
-(11, 1, 1, 6.0, 'Needs improvement.', '2023-03-16'),
-(12, 1, 2, 5.5, 'Poor quality.', '2023-03-17'),
-(14, 2, 4, 3.5, 'Needs significant improvement.', '2023-03-19'),
-(15, 3, 5, 2.0, 'Very poor quality.', '2023-03-20'),
-(16, 4, 1, 1.0, 'Unacceptable work.', '2023-03-21'),
-(17, 5, 2, 0.5, 'Extremely poor quality.', '2023-03-22'),
-(19, 2, 4, 8.5, 'Good work.', '2023-03-24'),
-(20, 3, 5, 9.0, 'Very good work.', '2023-03-25');
+(31, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
+(32, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
+(33, 3, 3, 8.8, 'Innovative use of AI in healthcare.', '2023-03-12'),
+(34, 4, 4, 9.2, 'Great work on image recognition.', '2023-03-13'),
+(35, 5, 5, 8.7, 'Impressive text generation techniques.', '2023-03-14'),
+(36, 1, 2, 3.5, 'Excellent work on deep learning techniques.', '2023-03-15'),
+(37, 1, 1, 1.8, 'Revised review: Improved work on deep learning techniques.', '2023-03-20'),
+(38, 1, 1, 8.0, 'Final review: Excellent work on deep learning techniques.', '2023-03-25'),
+(39, 2, 2, 2.3, 'Revised review: Good analysis methods.', '2023-03-21'),
+(20, 2, 2, 8.7, 'Final review: Very good analysis methods.', '2023-03-26'),
+(21, 1, 1, 6.0, 'Needs improvement.', '2023-03-16'),
+(22, 1, 2, 5.5, 'Poor quality.', '2023-03-17'),
+(24, 2, 4, 3.5, 'Needs significant improvement.', '2023-03-19'),
+(25, 3, 5, 2.0, 'Very poor quality.', '2023-03-20'),
+(26, 4, 1, 1.0, 'Unacceptable work.', '2023-03-21'),
+(27, 5, 2, 0.5, 'Extremely poor quality.', '2023-03-22'),
+(29, 2, 4, 8.5, 'Good work.', '2023-03-24'),
+(30, 3, 5, 9.0, 'Very good work.', '2023-03-25');
 
 INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VALUES
 (1, 1, '2023-04-01', '10:00:00', 'Room 101'),
@@ -130,142 +257,3 @@ INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VAL
 (3, 3, '2023-04-03', '12:00:00', 'Room 103'),
 (4, 4, '2023-04-04', '13:00:00', 'Room 104'),
 (5, 5, '2023-04-05', '14:00:00', 'Room 105');
-
-CREATE USER 'federated_user'@'%' IDENTIFIED BY 'federated_password';
-GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
-FLUSH PRIVILEGES;
-
-
--- WITH RECURSIVE ReviewHistory AS (
---     SELECT 
---         ReviewID,
---         ReviewerID,
---         PaperID,
---         Score,
---         Feedback,
---         ReviewDate
---     FROM 
---         Review
---     WHERE 
---         ReviewerID = 1 AND PaperID = 1
---     UNION ALL
---     SELECT 
---         r.ReviewID,
---         r.ReviewerID,
---         r.PaperID,
---         r.Score,
---         r.Feedback,
---         r.ReviewDate
---     FROM 
---         Review r
---     INNER JOIN 
---         ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
---     WHERE 
---         r.ReviewDate > rh.ReviewDate
--- )
--- SELECT 
---     ReviewID,
---     ReviewerID,
---     PaperID,
---     Score,
---     Feedback,
---     ReviewDate
--- FROM 
---     ReviewHistory
--- ORDER BY 
---     ReviewDate;
-
-
-DELIMITER //
-
-CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
-BEGIN
-    DECLARE avg_score FLOAT;
-    DECLARE senior_reviewer_id INT;
-
-    WITH RECURSIVE ReviewHistory AS (
-        SELECT 
-            ReviewID,
-            ReviewerID,
-            PaperID,
-            Score,
-            Feedback,
-            ReviewDate
-        FROM 
-            Review
-        WHERE 
-            PaperID = paper_id
-        UNION ALL
-        SELECT 
-            r.ReviewID,
-            r.ReviewerID,
-            r.PaperID,
-            r.Score,
-            r.Feedback,
-            r.ReviewDate
-        FROM 
-            Review r
-        INNER JOIN 
-            ReviewHistory rh ON r.ReviewerID = rh.ReviewerID AND r.PaperID = rh.PaperID
-        WHERE 
-            r.ReviewDate > rh.ReviewDate
-    )
-    SELECT AVG(Score) INTO avg_score
-    FROM ReviewHistory;
-    IF avg_score < 7.0 THEN
-        SELECT ReviewerID INTO senior_reviewer_id
-        FROM Reviewer
-        WHERE (Expertise = 'Senior')
-        AND ReviewerID NOT IN (SELECT ReviewerID FROM Review WHERE PaperID = paper_id)
-        AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
-        LIMIT 1;
-        IF senior_reviewer_id IS NOT NULL THEN
-            INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
-            VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
-        END IF;
-    END IF;
-END //
-
-DELIMITER ;
-
-CALL AssignExpeditedReview(1);
-
-
-
-
--- TrackResubmission Trigger
-DELIMITER //
-
-CREATE TRIGGER TrackResubmission
-BEFORE UPDATE ON Paper
-FOR EACH ROW
-BEGIN
-    IF NEW.Title != OLD.Title OR NEW.Keywords != OLD.Keywords THEN
-        SET NEW.SubmissionDate = CURDATE();
-        IF OLD.status IN ('Submitted', 'Under Review') THEN
-            SET NEW.status = 'Resubmitted';
-        END IF;
-    END IF;
-END;
-//
-DELIMITER ;
-
-
--- Aggregate Scores Function 
-DELIMITER //
-
-CREATE FUNCTION CalculateAggregateScore(paper_id INT)
-RETURNS DECIMAL(10, 2)
-DETERMINISTIC
-BEGIN
-    DECLARE aggregate_score DECIMAL(10, 2);
-    SELECT 
-        SUM(r.score * CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END) /
-        SUM(CASE WHEN r.Expertise = 'Senior Reviewer' THEN 2 ELSE 1 END)
-    INTO aggregate_score
-    FROM Reviews r
-    WHERE r.PaperID = paper_id;
-    RETURN IFNULL(aggregate_score, 0);
-END;
-//
-DELIMITER ;
