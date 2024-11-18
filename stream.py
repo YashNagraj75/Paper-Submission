@@ -85,9 +85,7 @@ elif choice == "Review Management":
     with st.form("review_form"):
         paper_id = st.number_input("Paper ID", min_value=1, step=1)
         reviewer_id = st.number_input("Reviewer ID", min_value=1, step=1)
-        score_originality = st.slider("Originality Score", 1, 10)
-        score_relevance = st.slider("Relevance Score", 1, 10)
-        score_quality = st.slider("Quality Score", 1, 10)
+        score_originality = st.slider("Score", 1, 100)
         feedback = st.text_area("Feedback")
         submit_review = st.form_submit_button("Submit Review")
         
