@@ -124,14 +124,4 @@ FLUSH PRIVILEGES;
 INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
 (6, 1, 2, 95, 'Excellent work on deep learning techniques.', '2023-03-15');
 
--- CREATE TABLE ReviewFederated (
---     ReviewID INT PRIMARY KEY,
---     PaperID INT,
---     ReviewerID INT,
---     Score INT,
---     Feedback TEXT,
---     ReviewDate DATE
--- ) ENGINE=FEDERATED
--- CONNECTION='mysql://federated_user:federated_password@10.20.206.87:3306/Paper/Review';
-
 SELECT * FROM ReviewFederated WHERE ReviewID = 6;
