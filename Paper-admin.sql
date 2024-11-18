@@ -196,3 +196,22 @@ END //
 DELIMITER ;
 
 CALL AssignExpeditedReview(1);
+
+
+-- TrackResubmission Trigger
+DELIMITER //
+
+CREATE TRIGGER TrackResubmission
+BEFORE UPDATE ON Paper
+FOR EACH ROW
+BEGIN
+    IF NEW.title != OLD.title OR NEW.abstract != OLD.abstract OR NEW.keywords != OLD.keywords THEN
+        SET NEW.submission_date = CURDATE();
+        IF OLD.status IN ('Submitted', 'Under Review') THEN
+            SET NEW.status = 'Resubmitted';
+        END IF;
+    END IF;
+END;
+//
+
+DELIMITER ;
