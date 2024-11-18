@@ -252,20 +252,34 @@ DELIMITER ;
 
 
 -- Aggregate Scores Function 
-DELIMITER $$
+DELIMITER //
 
-CREATE FUNCTION CalculateAggregateScore(paper_id INT)
-RETURNS DECIMAL(10, 2)
+CREATE FUNCTION CalculateAggregateScores(paper_id INT)
+RETURNS FLOAT
 DETERMINISTIC
 BEGIN
-    DECLARE aggregate_score DECIMAL(10, 2);
+    DECLARE aggregate_score FLOAT;
+
+    -- Calculate the weighted average score
     SELECT 
-        SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
-        SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
-    INTO aggregate_score
-    FROM Reviews r
-    WHERE r.PaperID = paper_id;
-    RETURN IFNULL(aggregate_score, 0);
+        SUM(
+            Review.Score * 
+            CASE 
+                WHEN Reviewer.Expertise = 'Senior' THEN 2
+                ELSE 1
+            END
+        ) / SUM(
+            CASE 
+                WHEN Reviewer.Expertise = 'Senior' THEN 2
+                ELSE 1
+            END
+        ) INTO aggregate_score
+    FROM Review
+    JOIN Reviewer ON Review.ReviewerID = Reviewer.ReviewerID
+    WHERE Review.PaperID = paper_id;
+
+    RETURN aggregate_score;
 END;
-$$
+//
+
 DELIMITER ;
