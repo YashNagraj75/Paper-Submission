@@ -1,6 +1,6 @@
 import mysql.connector
 from mysql.connector import Error
-from schema import Paper_Submit
+from schema import Paper_Submit,Review
 
 def get_connection():
     try:
@@ -45,3 +45,28 @@ def get_track_id(track_name):
         print(e)
         return None
     
+def review_paper(review:Review):
+    try:
+        query = "INSERT INTO Review (PaperId, ReviewerId, Score, Feedback, ReviewDate) VALUES (%s, %s, %s, %s, %s)"
+        values = (review.paper_id, review.reviewer_id, review.score, review.feedback, review.date)
+        result = cur.execute(query, values) # type: ignore
+        conn.commit() # type: ignore
+        return result
+    except Error as e:
+        print(e)
+        return None
+    
+
+def final_review(paper_id):
+    try:
+        all_reviews = "SELECT * FROM Review where PaperId = %s"
+        cur.execute(all_reviews,(paper_id,))
+        result = cur.fetchall()
+        conn.commit()
+        print(result)
+    except Exception as e:
+        print(e)
+        return None
+    
+
+

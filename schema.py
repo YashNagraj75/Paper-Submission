@@ -6,3 +6,11 @@ class Paper_Submit(BaseModel):
     keywords: str
     submission_date: str
     tack: str
+
+class Review(BaseModel):
+    paper_id: int
+    reviewer_id: int 
+    score: int
+    feedback: str
+    date: str
+
