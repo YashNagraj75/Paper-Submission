@@ -131,7 +131,6 @@ END //
 
 DELIMITER ;
 
-CALL AssignExpeditedReview(1);
 
 CREATE TABLE DebugLog (Message VARCHAR(255));
 
@@ -230,6 +229,7 @@ INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
 (5, 'Text Generation', 'NLP, text generation', '2023-03-05', 5);
 
 SET FOREIGN_KEY_CHECKS = 1;
+-- TRUNCATE TABLE Review;
 
 INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
 (31, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
@@ -257,3 +257,6 @@ INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VAL
 (3, 3, '2023-04-03', '12:00:00', 'Room 103'),
 (4, 4, '2023-04-04', '13:00:00', 'Room 104'),
 (5, 5, '2023-04-05', '14:00:00', 'Room 105');
+
+-- UPDATE Paper SET Status = 'Reviewed';
+-- CALL AssignExpeditedReview(1);
