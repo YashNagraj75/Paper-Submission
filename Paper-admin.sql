@@ -70,7 +70,6 @@ CREATE USER 'federated_user'@'%' IDENTIFIED BY 'federated_password';
 GRANT SELECT ON Paper.Review TO 'federated_user'@'%';
 FLUSH PRIVILEGES;
 
--- Create the stored procedure
 DELIMITER //
 
 CREATE PROCEDURE AssignExpeditedReview(IN paper_id INT)
@@ -78,7 +77,6 @@ BEGIN
     DECLARE avg_score FLOAT;
     DECLARE senior_reviewer_id INT;
 
-    -- Calculate the average score of all existing reviews for the given paper using a recursive query
     WITH RECURSIVE ReviewHistory AS (
         SELECT 
             ReviewID,
@@ -109,9 +107,7 @@ BEGIN
     SELECT AVG(Score) INTO avg_score
     FROM ReviewHistory;
 
-    -- Check if the average score is below the threshold (7.0)
     IF avg_score < 7.0 THEN
-        -- Find an available senior reviewer who has not previously reviewed the paper and has capacity
         SELECT ReviewerID INTO senior_reviewer_id
         FROM Reviewer
         WHERE Expertise = 'Senior'
@@ -119,9 +115,7 @@ BEGIN
         AND (SELECT COUNT(*) FROM Review WHERE ReviewerID = Reviewer.ReviewerID) < maxPapers
         LIMIT 1;
 
-        -- Check if a senior reviewer is found
         IF senior_reviewer_id IS NOT NULL THEN
-            -- Insert a new entry into the Review table with a default score of 0.0 and feedback as "Expedited review"
             INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
             VALUES (paper_id, senior_reviewer_id, 0.0, 'Expedited review', CURDATE());
         END IF;
@@ -130,7 +124,6 @@ END //
 
 DELIMITER ;
 
--- Call the stored procedure to assign an expedited review for paper_id 1
 CALL AssignExpeditedReview(1);
 
 CREATE TABLE DebugLog (Message VARCHAR(255));
@@ -144,9 +137,7 @@ BEGIN
     DECLARE debug_message VARCHAR(255);
     DECLARE assigned_reviewers INT DEFAULT 0;
 
-    -- Label for the WHILE loop
     reviewers_loop: WHILE assigned_reviewers < 3 DO
-        -- Attempt to select a suitable reviewer
         SELECT Reviewer.ReviewerID INTO reviewer_id
         FROM Reviewer
         JOIN PaperAuthor ON Reviewer.AuthorID != PaperAuthor.AuthorID
@@ -156,22 +147,11 @@ BEGIN
         ORDER BY RAND()
         LIMIT 1;
 
-        -- Log the value of reviewer_id
         IF reviewer_id IS NULL THEN
-            SET debug_message = CONCAT('No suitable reviewer found for PaperID: ', NEW.PaperID, 
-                                       ' after assigning ', assigned_reviewers, ' reviewers.');
-            INSERT INTO DebugLog (Message) VALUES (debug_message);
-            LEAVE reviewers_loop; -- Exit the loop if no more suitable reviewers
+            LEAVE reviewers_loop; 
         ELSE
-            SET debug_message = CONCAT('Assigned reviewer ID: ', reviewer_id, 
-                                       ' for PaperID: ', NEW.PaperID);
-            INSERT INTO DebugLog (Message) VALUES (debug_message);
-
-            -- Insert the review entry
             INSERT INTO Review (PaperID, ReviewerID, Score, Feedback, ReviewDate)
             VALUES (NEW.PaperID, reviewer_id, 0.0, '', CURDATE());
-
-            -- Increment the count of assigned reviewers
             SET assigned_reviewers = assigned_reviewers + 1;
         END IF;
     END WHILE reviewers_loop;
@@ -244,25 +224,25 @@ INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
--- (1, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
--- (2, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
--- (3, 3, 3, 8.8, 'Innovative use of AI in healthcare.', '2023-03-12'),
--- (4, 4, 4, 9.2, 'Great work on image recognition.', '2023-03-13'),
--- (5, 5, 5, 8.7, 'Impressive text generation techniques.', '2023-03-14'),
--- (6, 1, 2, 3.5, 'Excellent work on deep learning techniques.', '2023-03-15'),
--- (7, 1, 1, 1.8, 'Revised review: Improved work on deep learning techniques.', '2023-03-20'),
--- (8, 1, 1, 8.0, 'Final review: Excellent work on deep learning techniques.', '2023-03-25'),
--- (9, 2, 2, 2.3, 'Revised review: Good analysis methods.', '2023-03-21'),
--- (10, 2, 2, 8.7, 'Final review: Very good analysis methods.', '2023-03-26'),
--- (11, 1, 1, 6.0, 'Needs improvement.', '2023-03-16'),
--- (12, 1, 2, 5.5, 'Poor quality.', '2023-03-17'),
--- (14, 2, 4, 3.5, 'Needs significant improvement.', '2023-03-19'),
--- (15, 3, 5, 2.0, 'Very poor quality.', '2023-03-20'),
--- (16, 4, 1, 1.0, 'Unacceptable work.', '2023-03-21'),
--- (17, 5, 2, 0.5, 'Extremely poor quality.', '2023-03-22'),
--- (19, 2, 4, 8.5, 'Good work.', '2023-03-24'),
--- (20, 3, 5, 9.0, 'Very good work.', '2023-03-25');
+INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
+(31, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
+(32, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
+(33, 3, 3, 8.8, 'Innovative use of AI in healthcare.', '2023-03-12'),
+(34, 4, 4, 9.2, 'Great work on image recognition.', '2023-03-13'),
+(35, 5, 5, 8.7, 'Impressive text generation techniques.', '2023-03-14'),
+(36, 1, 2, 3.5, 'Excellent work on deep learning techniques.', '2023-03-15'),
+(37, 1, 1, 1.8, 'Revised review: Improved work on deep learning techniques.', '2023-03-20'),
+(38, 1, 1, 8.0, 'Final review: Excellent work on deep learning techniques.', '2023-03-25'),
+(39, 2, 2, 2.3, 'Revised review: Good analysis methods.', '2023-03-21'),
+(20, 2, 2, 8.7, 'Final review: Very good analysis methods.', '2023-03-26'),
+(21, 1, 1, 6.0, 'Needs improvement.', '2023-03-16'),
+(22, 1, 2, 5.5, 'Poor quality.', '2023-03-17'),
+(24, 2, 4, 3.5, 'Needs significant improvement.', '2023-03-19'),
+(25, 3, 5, 2.0, 'Very poor quality.', '2023-03-20'),
+(26, 4, 1, 1.0, 'Unacceptable work.', '2023-03-21'),
+(27, 5, 2, 0.5, 'Extremely poor quality.', '2023-03-22'),
+(29, 2, 4, 8.5, 'Good work.', '2023-03-24'),
+(30, 3, 5, 9.0, 'Very good work.', '2023-03-25');
 
 INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VALUES
 (1, 1, '2023-04-01', '10:00:00', 'Room 101'),
