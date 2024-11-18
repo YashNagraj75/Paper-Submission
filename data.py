@@ -10,8 +10,8 @@ def get_connection():
         conn = mysql.connector.connect(
             host="localhost",
             port="3306",
-            user="root",
-            password="12345678",
+            user="a",
+            password="abc",
             database="Paper"
         )
         cursor = conn.cursor()
