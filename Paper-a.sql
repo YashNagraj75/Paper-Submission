@@ -180,23 +180,28 @@ END;
 //
 DELIMITER ;
 
-DELIMITER //
+DELIMITER $$
 
-CREATE FUNCTION CalculateAggregateScore(paper_id INT)
-RETURNS DECIMAL(10, 2)
+CREATE FUNCTION CalculateWeightedScore(PaperID INT)
+RETURNS DECIMAL(5,2)
 DETERMINISTIC
 BEGIN
-    DECLARE aggregate_score DECIMAL(10, 2);
-    SELECT 
-        SUM(r.score * CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END) /
-        SUM(CASE WHEN r.Expertise = 'Senior' THEN 2 ELSE 1 END)
-    INTO aggregate_score
-    FROM Reviews r
-    WHERE r.PaperID = paper_id;
-    RETURN IFNULL(aggregate_score, 0);
-END;
-//
-DELIMITER ;
+    DECLARE total_score DECIMAL(10,2) DEFAULT 0;
+    DECLARE total_weight INT DEFAULT 0;
+    SELECT SUM(r.Score * IF(rv.maxPapers > 5, 2, 1)) INTO total_score FROM Review r
+    JOIN 
+        Reviewer rv ON r.ReviewerID = rv.ReviewerID
+    WHERE r.PaperID = PaperID AND r.Score IS NOT NULL;
+    SELECT SUM(IF(rv.maxPapers > 5, 2, 1)) INTO total_weight FROM Review r
+    JOIN 
+        Reviewer rv ON r.ReviewerID = rv.ReviewerID
+    WHERE r.PaperID = PaperID AND r.Score IS NOT NULL;
+    IF total_weight = 0 THEN
+        RETURN NULL;
+    ELSE
+        RETURN total_score / total_weight;
+    END IF;
+END$$
 
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -242,7 +247,7 @@ INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
 
 SET FOREIGN_KEY_CHECKS = 1;
 -- TRUNCATE TABLE Review;
-
+TRUNCATE TABLE Review;
 INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES
 (31, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10'),
 (32, 2, 2, 9.0, 'Excellent analysis methods.', '2023-03-11'),
@@ -272,3 +277,20 @@ INSERT INTO Schedule (ScheduleID, PaperID, PresentationDate, TimeSlot, Room) VAL
 
 -- UPDATE Paper SET Status = 'Reviewed';
 -- CALL AssignExpeditedReview(1);
+
+-- Session 1: Set Isolation Level and Insert Assignment
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+START TRANSACTION;
+INSERT INTO Review (ReviewID, PaperID, ReviewerID, Score, Feedback, ReviewDate) VALUES (321, 1, 1, 4.5, 'Good work on deep learning techniques.', '2023-03-10');
+
+-- Session 2: Read Uncommitted Data
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SELECT * FROM Review WHERE PaperID = 1;
+
+-- Session 1: Commit or Rollback
+COMMIT;  -- or ROLLBACK;
+-- Session 2: Set the isolation level to READ UNCOMMITTED
+    SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+    -- Attempt to read the data from the Review table
+    SELECT * FROM Review WHERE PaperID = 1;
