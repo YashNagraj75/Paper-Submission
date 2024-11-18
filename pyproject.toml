@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "paper-submission"
+version = "0.1.0"
+description = ""
+authors = ["Yash Nagraj <pes1202203845@pesu.pes.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+streamlit = "^1.40.1"
+fastapi = "^0.115.5"
+mysql = "^0.0.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
