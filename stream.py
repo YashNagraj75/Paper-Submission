@@ -1,4 +1,3 @@
-import errno
 import streamlit as st
 import pandas as pd
 import re
@@ -97,7 +96,6 @@ if st.session_state.logged_in and st.session_state.role == "Author":
 
     with tab3:
         st.subheader("Submitted Papers")
-        
         username = st.text_input("Name")
         user_id = get_user_id(username)
         if st.button("Search"):

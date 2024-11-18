@@ -1,5 +1,4 @@
 -- Server Part
-CREATE DATABASE Paper;
 USE Paper;
 
 CREATE TABLE Author (
@@ -12,9 +11,9 @@ CREATE TABLE Author (
     Password VARCHAR(255)
 );
 
-CREATE TABLE Track (
-    TrackID INT PRIMARY KEY,
-    TrackName VARCHAR(255),
+CREATE TABLE  (
+    ID INT PRIMARY KEY,
+    Name VARCHAR(255),
     Description TEXT
 );
 
@@ -23,9 +22,9 @@ CREATE TABLE Paper (
     Title VARCHAR(255),
     Keywords VARCHAR(255),
     SubmissionDate DATE,
-    TrackID INT,
+    ID INT,
     Status ENUM('Under Review', 'Accepted', 'Rejected', 'Resubmitted', 'Reviewed') DEFAULT 'Under Review',
-    FOREIGN KEY (TrackID) REFERENCES Track(TrackID)
+    FOREIGN KEY (ID) REFERENCES Track(TrackID)
 );
 
 CREATE TABLE PaperAuthor (
@@ -195,7 +194,7 @@ INSERT INTO Author (AuthorID, Name, Email, Affiliation, ProfileCreationDate, Age
 (4, 'David Brown', 'david@example.com', 'University D', '2023-04-01', 45, 'password101'),
 (5, 'Eve Black', 'eve@example.com', 'University E', '2023-05-01', 50, 'password202');
 
-INSERT INTO Track (TrackID, TrackName, Description) VALUES
+INSERT INTO  (TrackID, TrackName, Description) VALUES
 (1, 'Machine Learning', 'Research on machine learning algorithms and applications'),
 (2, 'Data Science', 'Research on data science techniques and tools'),
 (3, 'Artificial Intelligence', 'Research on AI and its applications'),
@@ -221,7 +220,7 @@ INSERT INTO PaperAuthor (PaperID, AuthorID) VALUES
 (4, 4),
 (5, 5);
 
-INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, TrackID) VALUES
+INSERT INTO Paper (PaperID, Title, Keywords, SubmissionDate, ID) VALUES
 (1, 'Deep Learning Techniques', 'deep learning, neural networks', '2023-03-01', 1),
 (2, 'Data Analysis Methods', 'data analysis, statistics', '2023-03-02', 2),
 (3, 'AI in Healthcare', 'AI, healthcare', '2023-03-03', 3),
